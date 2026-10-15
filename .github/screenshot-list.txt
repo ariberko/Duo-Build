@@ -1,0 +1,4 @@
+home|6|-freshStart
+new-project|6|-freshStart -showNewProject
+workspace-builder|7|-freshStart -openWorkspace builder
+workspace-preview|7|-freshStart -openWorkspace preview

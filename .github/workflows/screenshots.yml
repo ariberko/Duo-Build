@@ -1,0 +1,71 @@
+name: Screenshots
+
+# Runs the app on an iPhone (one pane) and an iPad mini (two panes, about the size of the
+# open iPhone Duo) and saves screenshots to the "screenshots" branch.
+# Starts by hand, or from a commit whose message contains "[screenshots]".
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[screenshots]')
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$xcode/Contents/Developer"
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Pick simulators
+        run: |
+          xcrun simctl list devices available -j > devices.json
+          echo "IPHONE=$(python3 scripts/pick-simulator.py iphone < devices.json)" >> "$GITHUB_ENV"
+          echo "IPAD=$(python3 scripts/pick-simulator.py ipad < devices.json)" >> "$GITHUB_ENV"
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild build -project DuoBuild.xcodeproj -scheme DuoBuild \
+            -destination "id=$IPHONE" -derivedDataPath build CODE_SIGNING_ALLOWED=NO > build.log 2>&1 \
+            || { ./scripts/report-errors.sh build.log; exit 1; }
+      - name: Take screenshots
+        run: |
+          app=build/Build/Products/Debug-iphonesimulator/DuoBuild.app
+          shoot() {
+            device=$1; folder=$2; appearance=$3
+            xcrun simctl boot "$device" || true
+            xcrun simctl bootstatus "$device"
+            xcrun simctl ui "$device" appearance "$appearance" || true
+            xcrun simctl status_bar "$device" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+            xcrun simctl install "$device" "$app"
+            mkdir -p "shots/$folder"
+            while IFS='|' read -r name wait args; do
+              [ -z "$name" ] && continue
+              xcrun simctl terminate "$device" com.ariberkowitz.duobuild 2>/dev/null || true
+              eval "xcrun simctl launch \"$device\" com.ariberkowitz.duobuild $args"
+              sleep "$wait"
+              xcrun simctl io "$device" screenshot "shots/$folder/$name.png"
+            done < .github/screenshot-list.txt
+          }
+          shoot "$IPHONE" iphone light
+          shoot "$IPAD" ipad-mini light
+          shoot "$IPHONE" iphone-dark dark
+          ls -R shots
+      - name: Save screenshots to the "screenshots" branch
+        run: |
+          cd shots
+          git init -q
+          git checkout -q -b screenshots
+          git add .
+          git -c user.name="github-actions" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "Screenshots from ${{ github.sha }}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:screenshots
