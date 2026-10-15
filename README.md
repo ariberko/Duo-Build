@@ -23,7 +23,8 @@ Describe an app in plain words, see a live preview, then refine it. Made for the
 DuoBuild never runs code from an AI. The AI only writes a small JSON **UI spec** that can use these parts: text, button, card, image (built-in symbols), list, input field, stack, divider and spacer, plus an accent color, background and spacing. DuoBuild checks the spec (`SpecValidator`) and draws it with real SwiftUI controls.
 
 - **Demo mode** (default) - no AI and no network. Designs come from built-in templates and simple rules, like "make it green", "add a button that says Share", "add a list of milk, eggs and bread", "use a dark background", "rename it to …" or "remove the buttons". It is always labeled Demo. If it doesn't understand a request, it says so and changes nothing.
-- **Your backend** - in Settings, enter the https address of your own server. Your server holds the AI provider's key. The app never asks for or stores API keys. See [docs/BACKEND.md](docs/BACKEND.md).
+- **Claude (your own key)** - in Settings → AI Service → Claude, paste your Anthropic API key. DuoBuild checks it with the free model list call, then saves it in the iPhone Keychain (this device only). Requests go straight from the phone to `api.anthropic.com`, billed to your own Anthropic account. Pick Claude Opus 5.5, Sonnet 5.5 or Haiku 5.5. There's no DuoBuild server and the developer never sees the key. Code: `ClaudeAIService`, `SpecPrompt`, `Keychain`.
+- **Your backend** - for a hosted version where you hold one key for everyone. Enter your server's https address. See [docs/BACKEND.md](docs/BACKEND.md).
 
 ## iPhone Duo notes
 

@@ -24,6 +24,8 @@ enum AIError: LocalizedError, Equatable {
     case server(status: Int, message: String?)
     case badResponse
     case invalidDesign(String)
+    /// The model's safety checks declined the request.
+    case declined
 
     var errorDescription: String? {
         switch self {
@@ -31,15 +33,17 @@ enum AIError: LocalizedError, Equatable {
             "Demo mode didn't recognize that change, so nothing was changed. Try something like: "
                 + suggestions.prefix(3).map { "“\($0)”" }.joined(separator: ", ") + "."
         case .notConfigured:
-            "No AI backend is set up. Add one in Settings, or use Demo mode."
+            "No AI is set up. Add your Claude API key in Settings, or use Demo mode."
         case .network(let reason):
-            "Couldn't reach the AI backend: \(reason)"
+            "Couldn't reach the AI service: \(reason)"
         case .server(let status, let message):
-            "The AI backend returned an error (\(status))" + (message.map { ": \($0)" } ?? ".")
+            "The AI service returned an error (\(status))" + (message.map { ": \($0)" } ?? ".")
         case .badResponse:
-            "The AI backend sent something DuoBuild couldn't read. Nothing was changed."
+            "The AI sent something DuoBuild couldn't read. Nothing was changed. Try again."
         case .invalidDesign(let reason):
             "The AI made a design DuoBuild can't safely show: \(reason) Nothing was changed."
+        case .declined:
+            "Claude declined this request, so nothing was changed. Try describing it differently."
         }
     }
 }

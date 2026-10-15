@@ -214,3 +214,63 @@ final class LayoutTests: XCTestCase {
         XCTAssertNil(AISettings.validURL("not a url"))
     }
 }
+
+final class ClaudeServiceTests: XCTestCase {
+    private let goodAnswer = """
+    Here you go:
+    {"summary":"Built a tip calculator.","spec":{"title":"Tips","theme":{"accent":"teal"},
+     "nodes":[{"id":"a","type":"text","text":"Tips","style":"largeTitle"},{"id":"b","type":"input","text":"Bill amount"}]}}
+    """
+
+    func testParsesAnswerWithExtraText() throws {
+        let result = try SpecPrompt.parseAnswer(goodAnswer)
+        XCTAssertEqual(result.summary, "Built a tip calculator.")
+        XCTAssertEqual(result.spec.theme.accent, .teal)
+        XCTAssertEqual(result.spec.nodes.count, 2)
+    }
+
+    func testRejectsNonJSONAnswer() {
+        XCTAssertThrowsError(try SpecPrompt.parseAnswer("Sorry, I can't.")) { error in
+            XCTAssertEqual(error as? AIError, .badResponse)
+        }
+    }
+
+    func testReadsMessagesResponseAndSkipsThinking() throws {
+        let body: [String: Any] = [
+            "stop_reason": "end_turn",
+            "content": [["type": "thinking", "thinking": ""], ["type": "text", "text": goodAnswer]],
+        ]
+        let result = try ClaudeAIService.parse(JSONSerialization.data(withJSONObject: body))
+        XCTAssertEqual(result.spec.title, "Tips")
+    }
+
+    func testRefusalAndCutOffAreErrors() throws {
+        let refusal = try JSONSerialization.data(withJSONObject: ["stop_reason": "refusal", "content": []])
+        XCTAssertThrowsError(try ClaudeAIService.parse(refusal)) { XCTAssertEqual($0 as? AIError, .declined) }
+        let cut = try JSONSerialization.data(withJSONObject: ["stop_reason": "max_tokens", "content": []])
+        XCTAssertThrowsError(try ClaudeAIService.parse(cut))
+    }
+
+    func testRequestSendsKeyOnlyToAnthropic() throws {
+        let request = try ClaudeAIService(apiKey: "sk-test", model: .opus).makeRequest(userText: "hi")
+        XCTAssertEqual(request.url?.host, "api.anthropic.com")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "sk-test")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
+        XCTAssertEqual(body["fallbacks"] as? String, "default")
+    }
+
+    func testHaikuSkipsFallbacks() throws {
+        let request = try ClaudeAIService(apiKey: "k", model: .haiku).makeRequest(userText: "hi")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
+        XCTAssertNil(body["fallbacks"])
+        XCTAssertNil(request.value(forHTTPHeaderField: "anthropic-beta"))
+    }
+
+    func testRefinePromptIncludesDesignAndChange() {
+        let text = SpecPrompt.refineRequest(spec: DemoTemplates.todo("Tasks"), instruction: "make it red", history: [])
+        XCTAssertTrue(text.contains("\"title\":\"Tasks\""))
+        XCTAssertTrue(text.hasSuffix("make it red"))
+    }
+}
